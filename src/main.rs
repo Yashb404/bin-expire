@@ -1,8 +1,14 @@
+
+mod models;
+mod analyzer;
+mod config;
+mod fs_scanner;
+
+
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
-// Importing from OUR local modules
 use crate::analyzer::is_dormant;
 use crate::config::load_config;
 use crate::fs_scanner::scan_directory;
