@@ -5,7 +5,6 @@ use walkdir::WalkDir;
 pub fn scan_directory(dir: &std::path::Path) -> Vec<BinaryInfo> {
     let mut binaries = Vec::new();
 
-    // WalkDir is a real crate, this is correct API usage
     for entry in WalkDir::new(dir).max_depth(1).into_iter().filter_map(|e| e.ok()) {
         let path = entry.path();
         
