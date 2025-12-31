@@ -1,0 +1,25 @@
+[package]
+name = "bin-expire"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Standard CLI parser
+clap = { version = "4.5", features = ["derive"] }
+
+# High-performance directory traversal
+walkdir = "2.5"
+
+# System directory paths
+dirs = "6.0"
+
+# Easy error handling
+anyhow = "1.0"
+
+# Serialization for Config/Manifest
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[dev-dependencies]
+# For faking file times in tests
+filetime = "0.2.26"
