@@ -1,6 +1,5 @@
-use std::fs;
 use std::path::Path;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::models::LastUsedSource;
 
@@ -10,22 +9,88 @@ pub struct FileTimes {
     pub modified: Option<SystemTime>,
 }
 
-pub fn get_file_times(file_path: &Path) -> FileTimes {
-    // fs::metadata follows symlinks
-    let metadata = match fs::metadata(file_path) {
-        Ok(meta) => meta,
-        Err(_) => {
-            return FileTimes {
-                accessed: None,
-                modified: None,
-            }
-        }
-    };
+#[derive(Debug, Clone, Copy)]
+pub struct FileInfo {
+    pub size: u64,
+    pub times: FileTimes,
+}
 
-    FileTimes {
-        accessed: metadata.accessed().ok(),
-        modified: metadata.modified().ok(),
+#[cfg(windows)]
+fn filetime_to_systemtime(ft: windows_sys::Win32::Foundation::FILETIME) -> Option<SystemTime> {
+    let ticks = ((ft.dwHighDateTime as u64) << 32) | (ft.dwLowDateTime as u64);
+    if ticks == 0 {
+        return None;
     }
+
+    // FILETIME is 100ns ticks since 1601-01-01.
+    const WINDOWS_TO_UNIX_EPOCH_TICKS: u64 = 116444736000000000;
+    if ticks < WINDOWS_TO_UNIX_EPOCH_TICKS {
+        return None;
+    }
+
+    let unix_100ns = ticks - WINDOWS_TO_UNIX_EPOCH_TICKS;
+    let secs = unix_100ns / 10_000_000;
+    let nanos = (unix_100ns % 10_000_000) * 100;
+    Some(UNIX_EPOCH + Duration::new(secs, nanos as u32))
+}
+
+pub fn get_file_info(file_path: &Path) -> Option<FileInfo> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::Storage::FileSystem::{
+            GetFileAttributesExW, GetFileExInfoStandard, WIN32_FILE_ATTRIBUTE_DATA,
+        };
+
+        let wide: Vec<u16> = file_path
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+
+        let mut data: WIN32_FILE_ATTRIBUTE_DATA = unsafe { std::mem::zeroed() };
+        let ok = unsafe {
+            GetFileAttributesExW(
+                wide.as_ptr(),
+                GetFileExInfoStandard,
+                &mut data as *mut _ as *mut _,
+            )
+        };
+
+        if ok == 0 {
+            return None;
+        }
+
+        let size = ((data.nFileSizeHigh as u64) << 32) | (data.nFileSizeLow as u64);
+
+        let accessed = filetime_to_systemtime(data.ftLastAccessTime);
+        let modified = filetime_to_systemtime(data.ftLastWriteTime);
+
+        return Some(FileInfo {
+            size,
+            times: FileTimes { accessed, modified },
+        });
+    }
+
+    #[cfg(not(windows))]
+    {
+        let metadata = fs::metadata(file_path).ok()?;
+        let accessed = metadata.accessed().ok();
+        let modified = metadata.modified().ok();
+        Some(FileInfo {
+            size: metadata.len(),
+            times: FileTimes { accessed, modified },
+        })
+    }
+}
+
+pub fn get_file_times(file_path: &Path) -> FileTimes {
+    get_file_info(file_path)
+        .map(|i| i.times)
+        .unwrap_or(FileTimes {
+            accessed: None,
+            modified: None,
+        })
 }
 
 pub fn select_last_used_time(times: FileTimes, windows_use_access_time: bool) -> (SystemTime, LastUsedSource) {

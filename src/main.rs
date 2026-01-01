@@ -131,14 +131,26 @@ fn main() -> Result<()> {
                 if config.ignored_bins.iter().any(|b| b == &bin.name) {
                     continue;
                 }
-                let is_stale = is_dormant(bin.last_used, days);
+                let is_probable_shim = bin.size == 0
+                    && bin
+                        .path
+                        .extension()
+                        .is_some_and(|ext| ext.to_string_lossy().eq_ignore_ascii_case("exe"));
+
+                let is_stale = !is_probable_shim && is_dormant(bin.last_used, days);
                 if is_stale {
                     stale_count += 1;
                     stale_total_bytes = stale_total_bytes.saturating_add(bin.size);
                 }
 
                 rows.push(ScanRow {
-                    status: if is_stale { "STALE" } else { "OK" }.to_string(),
+                    status: if is_probable_shim {
+                        "SHIM".to_string()
+                    } else if is_stale {
+                        "STALE".to_string()
+                    } else {
+                        "OK".to_string()
+                    },
                     name: bin.name,
                     size: format_bytes(bin.size),
                     accessed: format_optional_time(bin.accessed),
@@ -211,6 +223,16 @@ fn main() -> Result<()> {
                 if config.ignored_bins.iter().any(|b| b == &bin.name) {
                     continue;
                 }
+                let is_probable_shim = bin.size == 0
+                    && bin
+                        .path
+                        .extension()
+                        .is_some_and(|ext| ext.to_string_lossy().eq_ignore_ascii_case("exe"));
+
+                if is_probable_shim {
+                    continue;
+                }
+
                 if is_dormant(bin.last_used, days) {
                     stale.push(bin);
                 }

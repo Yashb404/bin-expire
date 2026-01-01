@@ -24,11 +24,14 @@ serde_json = "1.0"
 humantime = "2.1"
 
 # Config file format
-toml = "0.8"
+toml = "0.9.8"
 
 # Pretty table output
-tabled = "0.16"
+tabled = "0.20.0"
 
 [dev-dependencies]
 # For faking file times in tests
 filetime = "0.2.26"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }

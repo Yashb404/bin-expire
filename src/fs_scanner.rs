@@ -1,4 +1,4 @@
-use crate::analyzer::{get_file_times, select_last_used_time};
+use crate::analyzer::{get_file_info, select_last_used_time};
 use crate::models::BinaryInfo;
 use walkdir::WalkDir;
 
@@ -12,19 +12,19 @@ pub fn scan_directory(dir: &std::path::Path, windows_use_access_time: bool) -> V
             continue;
         }
 
-        let metadata = match std::fs::metadata(path) {
-            Ok(m) => m,
-            Err(_) => continue,
+        let info = match get_file_info(path) {
+            Some(i) => i,
+            None => continue,
         };
 
-        let times = get_file_times(path);
+        let times = info.times;
         let (last_used, last_used_source) = select_last_used_time(times, windows_use_access_time);
         let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
 
         binaries.push(BinaryInfo {
             name,
             path: path.to_path_buf(),
-            size: metadata.len(),
+            size: info.size,
             accessed: times.accessed,
             modified: times.modified,
             last_used,
