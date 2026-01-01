@@ -28,14 +28,21 @@ pub fn get_file_times(file_path: &Path) -> FileTimes {
     }
 }
 
-pub fn select_last_used_time(times: FileTimes) -> (SystemTime, LastUsedSource) {
+pub fn select_last_used_time(times: FileTimes, windows_use_access_time: bool) -> (SystemTime, LastUsedSource) {
     // Access times are frequently unreliable on Windows (disabled or updated by scanning).
     // Prefer mtime on Windows for deterministic behavior.
     #[cfg(windows)]
     {
+        if windows_use_access_time {
+            if let Some(accessed) = times.accessed {
+                return (accessed, LastUsedSource::Accessed);
+            }
+        }
+
         if let Some(modified) = times.modified {
             return (modified, LastUsedSource::Modified);
         }
+
         if let Some(accessed) = times.accessed {
             return (accessed, LastUsedSource::Accessed);
         }
@@ -56,7 +63,7 @@ pub fn select_last_used_time(times: FileTimes) -> (SystemTime, LastUsedSource) {
 }
 
 pub fn get_last_used_time(file_path: &Path) -> SystemTime {
-    let (last_used, _) = select_last_used_time(get_file_times(file_path));
+    let (last_used, _) = select_last_used_time(get_file_times(file_path), false);
     last_used
 }
 

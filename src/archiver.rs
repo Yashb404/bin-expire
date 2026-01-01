@@ -4,6 +4,20 @@ use anyhow::Context;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+pub fn move_file_with_fallback(src: &Path, dest: &Path) -> Result<()> {
+    match fs::rename(src, dest) {
+        Ok(_) => Ok(()),
+        Err(rename_err) => {
+            fs::copy(src, dest)
+                .with_context(|| format!("Failed to copy {} to {}", src.display(), dest.display()))?;
+            fs::remove_file(src)
+                .with_context(|| format!("Failed to remove original {} after copy", src.display()))?;
+            let _ = rename_err;
+            Ok(())
+        }
+    }
+}
+
 fn unique_destination(archive_dir: &Path, file_name: &str) -> PathBuf {
     let mut candidate = archive_dir.join(file_name);
     if !candidate.exists() {
@@ -33,23 +47,6 @@ pub fn archive_binary(bin: &BinaryInfo, archive_dir: &Path) -> Result<PathBuf> {
 
     let dest = unique_destination(archive_dir, &bin.name);
 
-    match fs::rename(&bin.path, &dest) {
-        Ok(_) => Ok(dest),
-        Err(rename_err) => {
-            // Fallback for cross-device moves / permission quirks: copy then remove.
-            fs::copy(&bin.path, &dest)
-                .with_context(|| format!("Failed to copy {} to {}", bin.path.display(), dest.display()))?;
-            fs::remove_file(&bin.path)
-                .with_context(|| format!("Failed to remove original {} after copy", bin.path.display()))?;
-            // Preserve the original rename error in context for troubleshooting.
-            let _ = rename_err;
-            Ok(dest)
-        }
-    }
-}
-
-pub fn restore_binary(name: &str) -> Result<()> {
-    println!("Restoring: {}", name);
-    // TODO: Implement restore logic
-    Ok(())
+    move_file_with_fallback(&bin.path, &dest)?;
+    Ok(dest)
 }

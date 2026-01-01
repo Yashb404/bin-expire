@@ -11,6 +11,8 @@ A small Rust CLI to find and safely archive “stale” binaries from common glo
 
 > Note on “Last Used”: file access times (`atime`) can be unreliable on some systems (especially Windows). This project chooses a cross-platform “last used” timestamp with sensible fallbacks.
 
+On Windows, the default prefers access time (`atime`) when available for better accuracy with frequently-run tools (like `cargo`). Note that NTFS can defer updating `atime` (commonly up to ~1 hour).
+
 ## Install / Run
 
 ### Run from source
@@ -66,6 +68,14 @@ bin-expire archive --days 30
 bin-expire archive --dir ~/.cargo/bin --days 30
 ```
 
+### `restore`
+
+Restore a previously archived binary back to its original path (based on the archive manifest).
+
+```bash
+bin-expire restore old_tool.exe
+```
+
 ## Configuration
 
 On first run, `bin-expire` creates a config file in your platform config directory.
@@ -89,6 +99,27 @@ archive_path = "C:\\Users\\me\\.bin-expire\\archive"
 - `ignored_bins`: list of binary file names to ignore during scan/archive
 - `default_threshold_days`: used when `--days` is not provided
 - `archive_path`: where archived binaries are moved
+- `windows_use_access_time`: **Windows only**. If `true`, prefers `atime` over `mtime` when deciding “last used”.
+
+#### Windows note: NTFS last access updates
+
+Windows/NTFS may defer last access time updates (commonly up to ~1 hour) and the feature can be disabled for performance.
+
+To check the setting (run in an elevated terminal):
+
+```bat
+fsutil behavior query disablelastaccess
+```
+
+To enable last access updates (may require a restart):
+
+```bat
+fsutil behavior set disablelastaccess 0
+```
+
+## Archive manifest
+
+When you run `archive`, `bin-expire` records moves in an `archive.json` manifest alongside the config file. `restore` uses this manifest to put a binary back where it came from.
 
 ## Notes / Safety
 
