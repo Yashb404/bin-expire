@@ -14,7 +14,35 @@ It also detects Windows “shim” executables (0-byte `.exe` stubs, often from 
 ### Option A: Download from GitHub Releases
 
 1. Download the asset for your OS from the GitHub Releases page.
-2. Put the binary somewhere on your `PATH`.
+2. Put the binary in a permanent folder (example):
+
+  - Windows: `C:\Users\<you>\AppData\Local\rust-apps\bin-expire.exe`
+
+3. Add that folder (not the `.exe`) to your `PATH`.
+
+**Windows: add to User PATH (GUI)**
+
+- Start → search “Environment Variables” → open **Edit the system environment variables**
+- **Environment Variables…** → under **User variables** select **Path** → **Edit**
+- **New** → add the folder (example): `C:\Users\<you>\AppData\Local\rust-apps`
+- OK → OK → OK, then close and re-open your terminal
+
+Verify:
+
+```bat
+where bin-expire
+bin-expire --help
+```
+
+**Git Bash: ensure PATH includes the folder**
+
+Git Bash may not pick up Windows PATH changes until you restart it. If you want it to always work in Git Bash, add the folder to `~/.bashrc`:
+
+```bash
+echo 'export PATH="$PATH:/c/Users/<you>/AppData/Local/rust-apps"' >> ~/.bashrc
+source ~/.bashrc
+bin-expire.exe --help
+```
 
 ### Option B: Build from source
 
