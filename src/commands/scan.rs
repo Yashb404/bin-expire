@@ -36,7 +36,6 @@ pub fn run(
     #[cfg(windows)]
     let scan_start = std::time::SystemTime::now();
 
-    // Visual Header
     println!("{}", "─".repeat(60).dimmed());
     println!("{}", "Scanning for stale binaries".cyan().bold());
     println!("{}", "─".repeat(60).dimmed());
@@ -88,7 +87,6 @@ pub fn run(
     let mut ok_count: u64 = 0;
     let mut shim_count: u64 = 0;
 
-    // Stable display order is nicer to read.
     binaries.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
 
     for bin in binaries {
@@ -113,10 +111,10 @@ pub fn run(
             ok_count += 1;
         }
 
-        // Visibility rules (QoL):
-        // - Default: show only STALE + SHIM
-        // - Verbose: also show OK
-        // - User filters can hide OK/SHIM regardless of verbose
+        // Visibility:
+        // - default: stale + alias-stubs
+        // - verbose: also includes OK
+        // - flags can hide OK/alias-stubs regardless of verbosity
         let mut is_visible = is_stale || is_probable_shim || verbose;
         if hide_shim && is_probable_shim {
             is_visible = false;
@@ -128,16 +126,15 @@ pub fn run(
             continue;
         }
 
-        // Prepare status glyphs (keep cells ASCII/short for stable alignment)
+        // Keep status glyphs short for stable table alignment.
         let status = if is_probable_shim {
-            "·" // Shim
+            "·" // alias-stub
         } else if is_stale {
-            "✗" // Stale
+            "✗"
         } else {
-            "✓" // OK (only visible in verbose)
+            "✓"
         };
 
-        // Format Dates (Short YYYY-MM-DD)
         let accessed_str = ui::format_date_short(bin.accessed);
         let modified_str = ui::format_date_short(bin.modified);
 

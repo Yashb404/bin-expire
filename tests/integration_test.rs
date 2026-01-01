@@ -86,21 +86,19 @@ fn read_manifest_names(manifest_path: &Path) -> Vec<String> {
     manifest.entries.into_iter().map(|e| e.name).collect()
 }
 
-/// This test verifies that the tool correctly identifies a fake old binary.
+/// Detects a deliberately backdated binary as stale.
 #[test]
 fn test_detects_stale_binary() {
-    // 1. Setup: Create a temporary directory
     let test_dir = unique_dir("test_integration_dir");
     let config_root = unique_dir("test_integration_config");
     let archive_dir = unique_dir("test_integration_archive");
     fs::create_dir_all(&test_dir).expect("Failed to create test dir");
     fs::create_dir_all(&archive_dir).expect("Failed to create archive dir");
 
-    // Write a config.toml into BIN_EXPIRE_CONFIG_DIR/bin-expire/config.toml
     let cfg_dir = config_root.join("bin-expire");
     fs::create_dir_all(&cfg_dir).expect("Failed to create config dir");
 
-    // Force deterministic behavior for this test: use mtime rather than atime.
+    // Keep the test deterministic by using mtime (not atime).
     let archive_str = archive_dir.to_string_lossy().replace('\\', "\\\\");
     let config_toml = format!(
         "ignored_bins = []\ndefault_threshold_days = 90\narchive_path = \"{}\"\nwindows_use_access_time = false\n",
@@ -109,21 +107,18 @@ fn test_detects_stale_binary() {
     fs::write(cfg_dir.join("config.toml"), config_toml).expect("Failed to write config.toml");
     let file_path = test_dir.join("old_tool.exe");
 
-    // 2. Create the file
     fs::write(&file_path, "content").expect("Failed to write test file");
 
-    // 3. Backdate the file to 100 days ago
     let old_time = SystemTime::now() - Duration::from_secs(86400 * 100);
     let ft = FileTime::from_system_time(old_time);
     set_file_times(&file_path, ft, ft).expect("Failed to backdate file");
 
-    // 4. Execute the binary (This runs 'cargo run' logic)
     let output = run_cli(
         &["scan", "-p", test_dir.to_str().unwrap(), "--days", "30"],
         &config_root,
     );
 
-    // Save artifacts for inspection (especially useful with BIN_EXPIRE_TEST_KEEP=1)
+    // Save artifacts for inspection (use BIN_EXPIRE_TEST_KEEP=1 to keep dirs).
     let artifacts_dir = test_dir.join("_test_artifacts");
     write_artifact(&artifacts_dir, "scan.stdout.txt", &output.stdout);
     write_artifact(&artifacts_dir, "scan.stderr.txt", &output.stderr);
@@ -140,11 +135,9 @@ fn test_detects_stale_binary() {
         .as_bytes(),
     );
 
-    // 6. Assertions
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
 
-    // We assert that the output contains "STALE"
     assert!(
         output.status.success(),
         "scan command failed: {}\nstdout:\n{}\nstderr:\n{}",
@@ -163,8 +156,7 @@ fn test_detects_stale_binary() {
             )
         });
 
-    // New scan table uses glyphs:
-    // ✗ = stale, ✓ = ok, · = shim
+    // Scan tables use glyphs: ✗ stale, ✓ ok, · alias-stub.
     assert!(
         row.contains("✗"),
         "Expected old_tool.exe to be marked stale (✗).\nrow:\n{}\nstdout:\n{}\nstderr:\n{}",
@@ -186,7 +178,6 @@ fn test_detects_stale_binary() {
         eprintln!("[bin-expire integration] scan stderr:\n{}", stderr);
     }
 
-    // 5. Cleanup (unless BIN_EXPIRE_TEST_KEEP=1)
     let _ = fs::remove_file(&file_path);
     cleanup_dir(&test_dir);
     cleanup_dir(&archive_dir);
@@ -196,7 +187,6 @@ fn test_detects_stale_binary() {
 /// This test verifies that `archive` records a manifest entry and `restore` puts it back.
 #[test]
 fn test_archive_and_restore_roundtrip() {
-    // Setup dirs
     let test_dir = unique_dir("test_integration_dir_roundtrip");
     let config_root = unique_dir("test_integration_config_roundtrip");
     let archive_dir = unique_dir("test_integration_archive_roundtrip");
@@ -204,11 +194,10 @@ fn test_archive_and_restore_roundtrip() {
     fs::create_dir_all(&test_dir).expect("Failed to create test dir");
     fs::create_dir_all(&archive_dir).expect("Failed to create archive dir");
 
-    // Write a config.toml into BIN_EXPIRE_CONFIG_DIR/bin-expire/config.toml
     let cfg_dir = config_root.join("bin-expire");
     fs::create_dir_all(&cfg_dir).expect("Failed to create config dir");
 
-    // Escape backslashes for TOML on Windows
+    // Escape backslashes for TOML on Windows.
     let archive_str = archive_dir.to_string_lossy().replace('\\', "\\\\");
     let config_toml = format!(
         "ignored_bins = []\ndefault_threshold_days = 90\narchive_path = \"{}\"\nwindows_use_access_time = false\n",
@@ -216,7 +205,7 @@ fn test_archive_and_restore_roundtrip() {
     );
     fs::write(cfg_dir.join("config.toml"), config_toml).expect("Failed to write config.toml");
 
-    // Create a file and backdate it
+    // Create a stale file.
     let file_name = "old_tool.exe";
     let file_path = test_dir.join(file_name);
     fs::write(&file_path, "content").expect("Failed to write test file");
@@ -227,7 +216,6 @@ fn test_archive_and_restore_roundtrip() {
 
     let artifacts_dir = test_dir.join("_test_artifacts");
 
-    // Run archive
     let output = run_cli(
         &["archive", "-p", test_dir.to_str().unwrap(), "--days", "30"],
         &config_root,
@@ -242,7 +230,6 @@ fn test_archive_and_restore_roundtrip() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    // It should have moved into archive
     let archived_path = archive_dir.join(file_name);
     assert!(
         !file_path.exists(),
@@ -250,14 +237,12 @@ fn test_archive_and_restore_roundtrip() {
     );
     assert!(archived_path.exists(), "Archived file was not found");
 
-    // Manifest should exist
     let manifest_path = cfg_dir.join("archive.json");
     assert!(
         manifest_path.exists(),
         "Manifest archive.json was not created"
     );
 
-    // Run restore
     let output = run_cli(&["restore", file_name], &config_root);
     write_artifact(&artifacts_dir, "restore.stdout.txt", &output.stdout);
     write_artifact(&artifacts_dir, "restore.stderr.txt", &output.stderr);
@@ -293,7 +278,6 @@ fn test_archive_and_restore_roundtrip() {
         manifest_path.display()
     );
 
-    // Cleanup (unless BIN_EXPIRE_TEST_KEEP=1)
     let _ = fs::remove_file(&file_path);
     let _ = fs::remove_file(&archived_path);
     let _ = fs::remove_file(&manifest_path);
@@ -330,7 +314,7 @@ fn test_restore_safety_and_archive_again() {
     let artifacts_dir = test_dir.join("_test_artifacts");
     let manifest_path = cfg_dir.join("archive.json");
 
-    // Create + backdate a file so archive will pick it up.
+    // Create a stale file so archive will pick it up.
     let file_name = "old_tool.exe";
     let file_path = test_dir.join(file_name);
     fs::write(&file_path, "content").expect("Failed to write test file");
@@ -338,7 +322,6 @@ fn test_restore_safety_and_archive_again() {
     let ft = FileTime::from_system_time(old_time);
     set_file_times(&file_path, ft, ft).expect("Failed to backdate file");
 
-    // Archive it.
     let output = run_cli(
         &["archive", "-p", test_dir.to_str().unwrap(), "--days", "30"],
         &config_root,
@@ -371,7 +354,7 @@ fn test_restore_safety_and_archive_again() {
         names
     );
 
-    // Negative 1: destination exists -> restore should fail and keep manifest entry.
+    // Case: destination exists -> restore must fail and keep the manifest entry.
     fs::write(&file_path, "collision").expect("Failed to create destination collision file");
     let output = run_cli(&["restore", file_name], &config_root);
     write_artifact(
@@ -401,10 +384,9 @@ fn test_restore_safety_and_archive_again() {
         names
     );
 
-    // Remove collision file.
     let _ = fs::remove_file(&file_path);
 
-    // Negative 2: archived file missing -> restore should fail and keep manifest entry.
+    // Case: archived file missing -> restore must fail and keep the manifest entry.
     fs::remove_file(&archived_path).expect("Failed to remove archived file for negative test");
     let output = run_cli(&["restore", file_name], &config_root);
     write_artifact(
@@ -430,7 +412,7 @@ fn test_restore_safety_and_archive_again() {
         names
     );
 
-    // Archive again (separate file) to ensure archive still works after failures.
+    // Archive again to ensure archive still works after restore failures.
     let file2 = "old_tool2.exe";
     let file2_path = test_dir.join(file2);
     fs::write(&file2_path, "content2").expect("Failed to write test file 2");

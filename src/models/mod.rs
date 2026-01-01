@@ -20,7 +20,6 @@ pub struct BinaryInfo {
     pub _is_symlink: bool,
 }
 
-// Placeholder for Configuration
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct Config {

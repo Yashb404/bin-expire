@@ -91,8 +91,8 @@ pub fn select_last_used_time(
     times: FileTimes,
     _windows_use_access_time: bool,
 ) -> (SystemTime, LastUsedSource) {
-    // Access times are frequently unreliable on Windows (disabled or updated by scanning).
-    // Prefer mtime on Windows for deterministic behavior.
+    // On Windows, atime can be disabled/delayed and may be updated by scanning.
+    // Prefer mtime unless the user explicitly opts into atime.
     #[cfg(windows)]
     {
         if _windows_use_access_time {
