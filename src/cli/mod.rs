@@ -1,13 +1,13 @@
 use clap::{Parser, Subcommand};
 
-use crate::cli_help;
+mod help;
 
 #[derive(Parser)]
 #[command(name = "bin-expire")]
 #[command(
     about = "A CLI tool to manage old binaries",
-    long_about = cli_help::TOP_LONG_ABOUT,
-    after_help = cli_help::TOP_AFTER_HELP
+    long_about = help::TOP_LONG_ABOUT,
+    after_help = help::TOP_AFTER_HELP
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -17,7 +17,7 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Commands {
     /// Scan directories for stale binaries
-    #[command(long_about = cli_help::SCAN_LONG_ABOUT, after_help = cli_help::SCAN_AFTER_HELP)]
+    #[command(long_about = help::SCAN_LONG_ABOUT, after_help = help::SCAN_AFTER_HELP)]
     Scan {
         /// Directory to scan (e.g., ~/.cargo/bin)
         #[arg(short = 'p', long)]
@@ -42,7 +42,7 @@ pub enum Commands {
     },
 
     /// Move stale binaries to the archive folder
-    #[command(after_help = cli_help::ARCHIVE_AFTER_HELP)]
+    #[command(after_help = help::ARCHIVE_AFTER_HELP)]
     Archive {
         /// Directory to scan (e.g., ~/.cargo/bin)
         #[arg(short = 'p', long)]
@@ -52,7 +52,7 @@ pub enum Commands {
     },
 
     /// Restore a previously archived binary back to its original path
-    #[command(after_help = cli_help::RESTORE_AFTER_HELP)]
+    #[command(after_help = help::RESTORE_AFTER_HELP)]
     Restore {
         /// The archived file name to restore (e.g., "ripgrep" or "old_tool.exe")
         name: String,

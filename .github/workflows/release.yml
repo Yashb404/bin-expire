@@ -1,0 +1,79 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build (release)
+        run: cargo build --release
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bin = "target/release/bin-expire.exe"
+          if (!(Test-Path $bin)) { throw "Missing $bin" }
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item $bin dist/
+          Compress-Archive -Path dist/bin-expire.exe -DestinationPath dist/bin-expire-windows-x86_64.zip -Force
+
+      - name: Package (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bin="target/release/bin-expire"
+          test -f "$bin"
+          mkdir -p dist
+          cp "$bin" dist/
+          os=$(echo "${RUNNER_OS}" | tr '[:upper:]' '[:lower:]')
+          tar -czf "dist/bin-expire-${os}-x86_64.tar.gz" -C dist bin-expire
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bin-expire-${{ runner.os }}
+          path: dist/*
+
+  publish:
+    name: Publish GitHub Release Assets
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: List artifacts
+        run: ls -R dist
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/**/bin-expire-*.zip
+            dist/**/bin-expire-*.tar.gz
