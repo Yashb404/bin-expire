@@ -84,15 +84,6 @@ pub fn get_file_info(file_path: &Path) -> Option<FileInfo> {
     }
 }
 
-pub fn get_file_times(file_path: &Path) -> FileTimes {
-    get_file_info(file_path)
-        .map(|i| i.times)
-        .unwrap_or(FileTimes {
-            accessed: None,
-            modified: None,
-        })
-}
-
 pub fn select_last_used_time(times: FileTimes, windows_use_access_time: bool) -> (SystemTime, LastUsedSource) {
     // Access times are frequently unreliable on Windows (disabled or updated by scanning).
     // Prefer mtime on Windows for deterministic behavior.
@@ -127,11 +118,6 @@ pub fn select_last_used_time(times: FileTimes, windows_use_access_time: bool) ->
     }
 }
 
-pub fn get_last_used_time(file_path: &Path) -> SystemTime {
-    let (last_used, _) = select_last_used_time(get_file_times(file_path), false);
-    last_used
-}
-
 pub fn is_dormant(timestamp: SystemTime, days_threshold: i64) -> bool {
     let now = SystemTime::now();
     let duration = now.duration_since(timestamp).unwrap_or_default();
@@ -163,8 +149,10 @@ mod tests {
         // set_file_times(atime, mtime) - We set both to the same old time
         set_file_times(path, ft, ft).expect("Failed to backdate file");
 
-        // 3. Execute the actual function we want to test
-        let result_time = get_last_used_time(path);
+        // 3. Execute the real production path we care about:
+        //    read file attributes -> compute last_used (using mtime here for determinism)
+        let info = get_file_info(path).expect("expected get_file_info to succeed");
+        let (result_time, _source) = select_last_used_time(info.times, false);
 
         // 4. Cleanup
        // fs::remove_file(path).expect("Failed to cleanup test file");

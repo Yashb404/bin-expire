@@ -125,15 +125,18 @@ fn test_detects_stale_binary() {
         stdout,
         stderr
     );
+
+    let row = stdout
+        .lines()
+        .find(|l| l.contains("old_tool.exe"))
+        .unwrap_or_else(|| panic!("Output did not contain filename row.\nstdout:\n{}\nstderr:\n{}", stdout, stderr));
+
+    // New scan table uses glyphs:
+    // ✗ = stale, ✓ = ok, · = shim
     assert!(
-        stdout.contains("STALE"),
-        "Output did not contain 'STALE'.\nstdout:\n{}\nstderr:\n{}",
-        stdout,
-        stderr
-    );
-    assert!(
-        stdout.contains("old_tool.exe"),
-        "Output did not contain filename.\nstdout:\n{}\nstderr:\n{}",
+        row.contains("✗"),
+        "Expected old_tool.exe to be marked stale (✗).\nrow:\n{}\nstdout:\n{}\nstderr:\n{}",
+        row,
         stdout,
         stderr
     );

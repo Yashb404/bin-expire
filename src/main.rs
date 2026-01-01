@@ -9,8 +9,12 @@ mod archive_manifest;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use chrono::{DateTime, Utc};
 use std::path::PathBuf;
 use tabled::{Table, Tabled};
+use tabled::settings::style::Style;
+
+use colored::Colorize;
 
 use crate::analyzer::is_dormant;
 use crate::analyzer::{select_last_used_time, FileTimes};
@@ -38,6 +42,20 @@ enum Commands {
         /// Threshold in days for stale files
         #[arg(short, long)]
         days: Option<i64>,
+
+        /// Show a more detailed table (includes PATH) and also shows OK rows
+        #[arg(short, long)]
+        verbose: bool,
+
+        /// Show only stale binaries (hides OK and SHIM rows)
+        #[arg(long)]
+        only_stale: bool,
+        /// Hide OK rows from the scan output table (mainly useful with --verbose)
+        #[arg(long)]
+        hide_ok: bool,
+        /// Hide SHIM rows from the scan output table
+        #[arg(long)]
+        hide_shim: bool,
     },
     /// Move stale binaries to the archive folder
     Archive {
@@ -54,14 +72,44 @@ enum Commands {
     },
 }
 
+// Default View: Compare Access vs Mod dates
 #[derive(Tabled)]
-struct ScanRow {
-    status: String,
+struct DefaultRow {
+    #[tabled(rename = "ST")]
+    st: &'static str,
+
+    #[tabled(rename = "NAME")]
     name: String,
+
+    #[tabled(rename = "SIZE")]
     size: String,
+
+    #[tabled(rename = "ACCESSED")]
     accessed: String,
+
+    #[tabled(rename = "MODIFIED")]
     modified: String,
-    last_used: String,
+}
+
+// Verbose View: Adds Path
+#[derive(Tabled)]
+struct VerboseRow {
+    #[tabled(rename = "ST")]
+    st: &'static str,
+
+    #[tabled(rename = "NAME")]
+    name: String,
+
+    #[tabled(rename = "SIZE")]
+    size: String,
+
+    #[tabled(rename = "ACCESSED")]
+    accessed: String,
+
+    #[tabled(rename = "MODIFIED")]
+    modified: String,
+
+    #[tabled(rename = "PATH")]
     path: String,
 }
 
@@ -73,15 +121,23 @@ fn main() -> Result<()> {
 
     #[cfg(windows)]
     {
-        eprintln!("Warning (Windows): file access times (atime) may be updated by directory listing/scanning. Treat atime as best-effort.");
-        if config.windows_use_access_time {
-            println!("Using access time (atime) on Windows to determine 'last used'.");
-        }
+        print_windows_notice(config.windows_use_access_time);
     }
 
     match &cli.command {
-        Commands::Scan { dir, days } => {
+        Commands::Scan {
+            dir,
+            days,
+            verbose,
+            only_stale,
+            hide_ok,
+            hide_shim,
+        } => {
             let days = days.unwrap_or(config.default_threshold_days);
+            let verbose = *verbose;
+            let hide_ok = *only_stale || *hide_ok;
+            let hide_shim = *only_stale || *hide_shim;
+
             let dirs: Vec<PathBuf> = match dir.clone() {
                 Some(path_str) => vec![expand_tilde(&path_str)],
                 None => vec![expand_tilde("~/.cargo/bin"), expand_tilde("~/go/bin")],
@@ -92,14 +148,28 @@ fn main() -> Result<()> {
 
             let scan_start = std::time::SystemTime::now();
 
+            // Visual Header
+            println!("{}", "─".repeat(60).dimmed());
+            println!("{}", "Scanning for stale binaries".cyan().bold());
+            println!("{}", "─".repeat(60).dimmed());
+
             for path in dirs {
                 if !path.exists() {
-                    eprintln!("Warning: Directory {} does not exist. Skipping.", path.display());
+                    eprintln!(
+                        "{} Directory {} does not exist. Skipping.",
+                        "[!]".yellow(),
+                        path.display()
+                    );
                     continue;
                 }
                 any_dir = true;
                 print_mount_option_warning(&path);
-                println!("Scanning: {} for files > {} days old", path.display(), days);
+                println!(
+                    "{} {} for files > {} days old",
+                    "[*]".blue(),
+                    path.display(),
+                    days
+                );
                 binaries.extend(scan_directory(&path, config.windows_use_access_time));
             }
 
@@ -116,13 +186,18 @@ fn main() -> Result<()> {
             }
 
             if !any_dir {
-                eprintln!("Error: No default directories exist to scan.");
+                eprintln!("{} No valid directories found to scan.", "[ERROR]".red());
                 return Ok(());
             }
 
-            let mut rows: Vec<ScanRow> = Vec::new();
+            println!();
+
+            let mut default_rows: Vec<DefaultRow> = Vec::new();
+            let mut verbose_rows: Vec<VerboseRow> = Vec::new();
             let mut stale_count: u64 = 0;
             let mut stale_total_bytes: u64 = 0;
+            let mut ok_count: u64 = 0;
+            let mut shim_count: u64 = 0;
 
             // Stable display order is nicer to read.
             binaries.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
@@ -143,39 +218,112 @@ fn main() -> Result<()> {
                     stale_total_bytes = stale_total_bytes.saturating_add(bin.size);
                 }
 
-                rows.push(ScanRow {
-                    status: if is_probable_shim {
-                        "SHIM".to_string()
-                    } else if is_stale {
-                        "STALE".to_string()
-                    } else {
-                        "OK".to_string()
-                    },
-                    name: bin.name,
-                    size: format_bytes(bin.size),
-                    accessed: format_optional_time(bin.accessed),
-                    modified: format_optional_time(bin.modified),
-                    last_used: humantime::format_rfc3339_seconds(bin.last_used).to_string(),
-                    path: bin.path.display().to_string(),
-                });
+                if is_probable_shim {
+                    shim_count += 1;
+                } else if !is_stale {
+                    ok_count += 1;
+                }
+
+                // Visibility rules (QoL):
+                // - Default: show only STALE + SHIM
+                // - Verbose: also show OK
+                // - User filters can hide OK/SHIM regardless of verbose
+                let mut is_visible = is_stale || is_probable_shim || verbose;
+                if hide_shim && is_probable_shim {
+                    is_visible = false;
+                }
+                if hide_ok && !is_probable_shim && !is_stale {
+                    is_visible = false;
+                }
+                if !is_visible {
+                    continue;
+                }
+
+                // Prepare status glyphs (keep cells ASCII/short for stable alignment)
+                let status = if is_probable_shim {
+                    "·" // Shim
+                } else if is_stale {
+                    "✗" // Stale
+                } else {
+                    "✓" // OK (only visible in verbose)
+                };
+
+                // Format Dates (Short YYYY-MM-DD)
+                let accessed_str = format_date_short(bin.accessed);
+                let modified_str = format_date_short(bin.modified);
+
+                if verbose {
+                    verbose_rows.push(VerboseRow {
+                        st: status,
+                        name: bin.name,
+                        size: format_bytes(bin.size),
+                        accessed: accessed_str,
+                        modified: modified_str,
+                        path: bin.path.display().to_string(),
+                    });
+                } else {
+                    default_rows.push(DefaultRow {
+                        st: status,
+                        name: bin.name,
+                        size: format_bytes(bin.size),
+                        accessed: accessed_str,
+                        modified: modified_str,
+                    });
+                }
             }
 
-            println!(
-                "Found {} stale binaries (older than {} days):",
-                stale_count,
-                days
-            );
+            // Clean, minimal explanation (short + visible where it matters)
+            println!("{}", "accessed(atime)=last read/execute (best-effort on Windows), modified(mtime)=last content change".dimmed());
+            println!("{}", "│".cyan());
 
-            if !rows.is_empty() {
-                println!("{}", Table::new(rows));
+            if verbose {
+                if !verbose_rows.is_empty() {
+                    let mut table = Table::new(verbose_rows);
+                    table.with(Style::modern());
+                    println!("{}", table);
+                } else {
+                    println!("│ ✓ No matching binaries found.");
+                }
+            } else {
+                if !default_rows.is_empty() {
+                    let mut table = Table::new(default_rows);
+                    table.with(Style::markdown());
+                    println!("{}", table);
+                } else {
+                    println!("│ ✓ No stale binaries found.");
+                }
             }
 
-            println!("Total wastage: {}", format_bytes(stale_total_bytes));
-            println!(
-                "Run 'bin-expire archive --days {}' to move these to {}.",
-                days,
-                config.archive_path.display()
-            );
+            println!("{}", "╰────".cyan());
+
+            // Summary Section
+            println!();
+            if stale_count > 0 {
+                println!(
+                    "{} Summary: {} stale items | {} total wastage",
+                    ">>>".bold(),
+                    stale_count.to_string().red().bold(),
+                    format_bytes(stale_total_bytes).bold()
+                );
+                println!();
+                println!(
+                    "Run {} to move these to {}.",
+                    format!("bin-expire archive --days {}", days)
+                        .cyan()
+                        .underline(),
+                    config.archive_path.display().to_string().cyan()
+                );
+            } else {
+                println!("{} No stale binaries found. Your system is clean!", "✓".green().bold());
+                println!(
+                    "{} (info) OK={} SHIM={} (filters: hide_ok={}, hide_shim={}).",
+                    "[i]".blue(),
+                    ok_count,
+                    shim_count,
+                    hide_ok,
+                    hide_shim
+                );
+            }
         }
         Commands::Archive { dir, days } => {
             let days = days.unwrap_or(config.default_threshold_days);
@@ -189,14 +337,27 @@ fn main() -> Result<()> {
 
             let scan_start = std::time::SystemTime::now();
 
+            println!("{}", "─".repeat(60).dimmed());
+            println!("{}", "Archiving stale binaries".cyan().bold());
+            println!("{}", "─".repeat(60).dimmed());
+
             for path in dirs {
                 if !path.exists() {
-                    eprintln!("Warning: Directory {} does not exist. Skipping.", path.display());
+                    eprintln!(
+                        "{} Directory {} does not exist. Skipping.",
+                        "[!]".yellow(),
+                        path.display()
+                    );
                     continue;
                 }
                 any_dir = true;
                 print_mount_option_warning(&path);
-                println!("Scanning: {} for files > {} days old", path.display(), days);
+                println!(
+                    "{} {} for files > {} days old",
+                    "[*]".blue(),
+                    path.display(),
+                    days
+                );
                 binaries.extend(scan_directory(&path, config.windows_use_access_time));
             }
 
@@ -213,11 +374,13 @@ fn main() -> Result<()> {
             }
 
             if !any_dir {
-                eprintln!("Error: No default directories exist to archive from.");
+                eprintln!("{} No valid directories found to archive.", "[ERROR]".red());
                 return Ok(());
             }
 
             let mut stale: Vec<crate::models::BinaryInfo> = Vec::new();
+            let mut success_count = 0u64;
+            let mut fail_count = 0u64;
 
             for bin in binaries {
                 if config.ignored_bins.iter().any(|b| b == &bin.name) {
@@ -238,30 +401,66 @@ fn main() -> Result<()> {
                 }
             }
 
+            if stale.is_empty() {
+                println!();
+                println!("{} Nothing to archive.", "✓".green().bold());
+                return Ok(());
+            }
+
+            println!();
             println!("Moving {} binaries to archive...", stale.len());
+            println!("{}", "─".repeat(60).dimmed());
             for bin in &stale {
                 match archive_binary(bin, &config.archive_path) {
                     Ok(dest) => {
                         if let Err(err) = record_archive(&bin.name, &bin.path, &dest) {
-                            eprintln!("[WARN] Archived but failed to record manifest for '{}': {:#}", bin.name, err);
+                            eprintln!(
+                                "{} Archived but failed to record manifest for '{}': {:#}",
+                                "[WARN]".yellow(),
+                                bin.name,
+                                err
+                            );
                         }
-                        println!("[OK] Moved '{}' -> {}", bin.name, dest.display());
+                        println!("{} Moved '{}' -> {}", "✓".green(), bin.name, dest.display());
+                        success_count += 1;
                     }
-                    Err(err) => eprintln!("[ERR] Failed to move '{}': {:#}", bin.name, err),
+                    Err(err) => {
+                        eprintln!("{} Failed to move '{}': {:#}", "✗".red(), bin.name, err);
+                        fail_count += 1;
+                    }
                 }
             }
 
-            println!("Done.");
+            println!("{}", "─".repeat(60).dimmed());
+            println!("{} Archive operation completed.", "✓".green().bold());
+            println!(
+                "{} Success: {} | Failed: {}",
+                "   ".dimmed(),
+                success_count.to_string().green(),
+                fail_count.to_string().red()
+            );
         }
         Commands::Restore { name } => {
+            println!("{}", "─".repeat(60).dimmed());
+            println!("{}", "Restoring binary".cyan().bold());
+            println!("{}", "─".repeat(60).dimmed());
+
             let entry = take_latest_entry_by_name(name)?;
 
             if !entry.archived_path.exists() {
-                eprintln!("Error: Archived file does not exist: {}", entry.archived_path.display());
+                eprintln!(
+                    "{} Archived file does not exist: {}",
+                    "[ERROR]".red(),
+                    entry.archived_path.display()
+                );
                 return Ok(());
             }
             if entry.original_path.exists() {
-                eprintln!("Error: Destination already exists: {}", entry.original_path.display());
+                eprintln!(
+                    "{} Destination already exists: {}",
+                    "[ERROR]".red(),
+                    entry.original_path.display()
+                );
                 return Ok(());
             }
             if let Some(parent) = entry.original_path.parent() {
@@ -269,7 +468,12 @@ fn main() -> Result<()> {
             }
 
             move_file_with_fallback(&entry.archived_path, &entry.original_path)?;
-            println!("[OK] Restored '{}' -> {}", entry.name, entry.original_path.display());
+            println!(
+                "{} Restored '{}' -> {}",
+                "✓".green(),
+                entry.name,
+                entry.original_path.display()
+            );
         }
     }
 
@@ -350,10 +554,11 @@ fn print_mount_option_warning(_path: &std::path::Path) {
         }
 
         let Some(opts) = best_opts else { return; };
-        if opts.contains("noatime") {
-            println!("? Checking filesystem mount options... [WARN] noatime detected. Accuracy may vary.");
-        } else if opts.contains("relatime") {
-            println!("? Checking filesystem mount options... [WARN] relatime detected. Accuracy may vary.");
+        if opts.contains("noatime") || opts.contains("relatime") {
+            println!(
+                "{} Warning: Filesystem is mounted with 'noatime' or 'relatime'. 'Last Accessed' dates may be inaccurate.",
+                "[!]".yellow()
+            );
         }
     }
 }
@@ -385,13 +590,14 @@ fn maybe_fallback_from_atime_contamination(
     // Only trigger when we have enough samples, and the vast majority are "recent".
     if eligible >= 10 && (in_window as f64 / eligible as f64) >= 0.80 {
         eprintln!(
-            "Warning: access times appear to have been updated during this scan ({} of {} within scan window). Falling back to modified time (mtime) for this run.",
+            "{} Access times appear to have been updated during this scan ({} of {} within scan window).",
+            "[!]".yellow(),
             in_window,
             eligible
         );
-        eprintln!(
-            "Tip: you can set windows_use_access_time=false in config.toml to always use mtime."
-        );
+        eprintln!("    Falling back to modified time (mtime) for this run.");
+        eprintln!("    Tip: Set windows_use_access_time=false in config.toml to avoid this check.");
+        println!();
 
         for bin in binaries.iter_mut() {
             let (last_used, source) = select_last_used_time(
@@ -407,9 +613,35 @@ fn maybe_fallback_from_atime_contamination(
     }
 }
 
-fn format_optional_time(value: Option<std::time::SystemTime>) -> String {
+// Formats to YYYY-MM-DD only
+fn format_date_short(value: Option<std::time::SystemTime>) -> String {
     match value {
-        Some(t) => humantime::format_rfc3339_seconds(t).to_string(),
+        Some(t) => {
+            let dt = DateTime::<Utc>::from(t);
+            dt.format("%Y-%m-%d").to_string()
+        }
         None => "-".to_string(),
     }
+}
+
+#[cfg(windows)]
+fn print_windows_notice(windows_use_access_time: bool) {
+    // Keep this on stderr so it doesn't pollute table output.
+    let red_notice = "NOTICE".red().bold();
+
+    eprintln!("{} (Windows): access times (atime) are best-effort on Windows.", red_notice);
+    eprintln!("- atime can be disabled, delayed, or not updated consistently by the filesystem.");
+    eprintln!("- listing directories / scanning files can itself update atime, making files look 'recent'.");
+    eprintln!("Access time example:");
+    eprintln!("  You haven't run tool.exe in 90 days (atime=old),");
+    eprintln!("  but a scan/listing updates atime to now -> it may appear recently used.");
+
+    if windows_use_access_time {
+        eprintln!("This run will prefer atime to compute 'last used' (windows_use_access_time=true)." );
+        eprintln!("If results look suspicious, set windows_use_access_time=false to use mtime instead.");
+    } else {
+        eprintln!("This run will use modified time (mtime) for 'last used' (windows_use_access_time=false)." );
+    }
+
+    eprintln!();
 }
