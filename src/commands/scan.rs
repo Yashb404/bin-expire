@@ -33,6 +33,7 @@ pub fn run(
     let mut binaries = Vec::new();
     let mut any_dir = false;
 
+    #[cfg(windows)]
     let scan_start = std::time::SystemTime::now();
 
     // Visual Header
@@ -60,6 +61,7 @@ pub fn run(
         binaries.extend(scan_directory(&path, config.windows_use_access_time));
     }
 
+    #[cfg(windows)]
     let scan_end = std::time::SystemTime::now();
 
     #[cfg(windows)]

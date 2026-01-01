@@ -1,8 +1,19 @@
 use filetime::{set_file_times, FileTime};
+use serde::Deserialize;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::time::{Duration, SystemTime};
+
+#[derive(Debug, Deserialize)]
+struct TestArchiveEntry {
+    name: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct TestArchiveManifest {
+    entries: Vec<TestArchiveEntry>,
+}
 
 fn env_flag_is_truthy(key: &str) -> bool {
     match std::env::var(key) {
@@ -63,6 +74,16 @@ fn cleanup_dir(path: &Path) {
 fn write_artifact(dir: &Path, filename: &str, bytes: &[u8]) {
     let _ = fs::create_dir_all(dir);
     let _ = fs::write(dir.join(filename), bytes);
+}
+
+fn read_manifest_names(manifest_path: &Path) -> Vec<String> {
+    if !manifest_path.exists() {
+        return vec![];
+    }
+    let raw = fs::read_to_string(manifest_path).expect("Failed to read archive.json");
+    let manifest: TestArchiveManifest =
+        serde_json::from_str(&raw).expect("Failed to parse archive.json");
+    manifest.entries.into_iter().map(|e| e.name).collect()
 }
 
 /// This test verifies that the tool correctly identifies a fake old binary.
@@ -277,6 +298,181 @@ fn test_archive_and_restore_roundtrip() {
     let _ = fs::remove_file(&archived_path);
     let _ = fs::remove_file(&manifest_path);
     let _ = fs::remove_file(cfg_dir.join("config.toml"));
+    cleanup_dir(&test_dir);
+    cleanup_dir(&archive_dir);
+    cleanup_dir(&config_root);
+}
+
+/// This test verifies restore safety behavior:
+/// - If destination exists, restore should fail and NOT remove manifest entry.
+/// - If archived file is missing, restore should fail and NOT remove manifest entry.
+/// Also verifies a second archive run still records entries.
+#[test]
+fn test_restore_safety_and_archive_again() {
+    let test_dir = unique_dir("test_integration_dir_restore_safety");
+    let config_root = unique_dir("test_integration_config_restore_safety");
+    let archive_dir = unique_dir("test_integration_archive_restore_safety");
+
+    fs::create_dir_all(&test_dir).expect("Failed to create test dir");
+    fs::create_dir_all(&archive_dir).expect("Failed to create archive dir");
+
+    let cfg_dir = config_root.join("bin-expire");
+    fs::create_dir_all(&cfg_dir).expect("Failed to create config dir");
+
+    // Deterministic: use mtime, not atime.
+    let archive_str = archive_dir.to_string_lossy().replace('\\', "\\\\");
+    let config_toml = format!(
+        "ignored_bins = []\ndefault_threshold_days = 90\narchive_path = \"{}\"\nwindows_use_access_time = false\n",
+        archive_str
+    );
+    fs::write(cfg_dir.join("config.toml"), config_toml).expect("Failed to write config.toml");
+
+    let artifacts_dir = test_dir.join("_test_artifacts");
+    let manifest_path = cfg_dir.join("archive.json");
+
+    // Create + backdate a file so archive will pick it up.
+    let file_name = "old_tool.exe";
+    let file_path = test_dir.join(file_name);
+    fs::write(&file_path, "content").expect("Failed to write test file");
+    let old_time = SystemTime::now() - Duration::from_secs(86400 * 100);
+    let ft = FileTime::from_system_time(old_time);
+    set_file_times(&file_path, ft, ft).expect("Failed to backdate file");
+
+    // Archive it.
+    let output = run_cli(
+        &["archive", "-p", test_dir.to_str().unwrap(), "--days", "30"],
+        &config_root,
+    );
+    write_artifact(&artifacts_dir, "archive1.stdout.txt", &output.stdout);
+    write_artifact(&artifacts_dir, "archive1.stderr.txt", &output.stderr);
+    assert!(
+        output.status.success(),
+        "Archive(1) failed: {}\nstdout:\n{}\nstderr:\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let archived_path = archive_dir.join(file_name);
+    assert!(
+        !file_path.exists(),
+        "Original file still exists after archive"
+    );
+    assert!(
+        archived_path.exists(),
+        "Archived file not found after archive"
+    );
+
+    let names = read_manifest_names(&manifest_path);
+    assert!(
+        names.iter().any(|n| n == file_name),
+        "Manifest did not include {}. names={:?}",
+        file_name,
+        names
+    );
+
+    // Negative 1: destination exists -> restore should fail and keep manifest entry.
+    fs::write(&file_path, "collision").expect("Failed to create destination collision file");
+    let output = run_cli(&["restore", file_name], &config_root);
+    write_artifact(
+        &artifacts_dir,
+        "restore_destination_exists.stdout.txt",
+        &output.stdout,
+    );
+    write_artifact(
+        &artifacts_dir,
+        "restore_destination_exists.stderr.txt",
+        &output.stderr,
+    );
+    assert!(
+        !output.status.success(),
+        "Restore unexpectedly succeeded when destination existed. stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        archived_path.exists(),
+        "Archived file should still exist after failed restore"
+    );
+    let names = read_manifest_names(&manifest_path);
+    assert!(
+        names.iter().any(|n| n == file_name),
+        "Manifest entry was removed on failed restore (destination exists). names={:?}",
+        names
+    );
+
+    // Remove collision file.
+    let _ = fs::remove_file(&file_path);
+
+    // Negative 2: archived file missing -> restore should fail and keep manifest entry.
+    fs::remove_file(&archived_path).expect("Failed to remove archived file for negative test");
+    let output = run_cli(&["restore", file_name], &config_root);
+    write_artifact(
+        &artifacts_dir,
+        "restore_archived_missing.stdout.txt",
+        &output.stdout,
+    );
+    write_artifact(
+        &artifacts_dir,
+        "restore_archived_missing.stderr.txt",
+        &output.stderr,
+    );
+    assert!(
+        !output.status.success(),
+        "Restore unexpectedly succeeded when archived file missing. stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let names = read_manifest_names(&manifest_path);
+    assert!(
+        names.iter().any(|n| n == file_name),
+        "Manifest entry was removed on failed restore (archived missing). names={:?}",
+        names
+    );
+
+    // Archive again (separate file) to ensure archive still works after failures.
+    let file2 = "old_tool2.exe";
+    let file2_path = test_dir.join(file2);
+    fs::write(&file2_path, "content2").expect("Failed to write test file 2");
+    set_file_times(&file2_path, ft, ft).expect("Failed to backdate file 2");
+    let output = run_cli(
+        &["archive", "-p", test_dir.to_str().unwrap(), "--days", "30"],
+        &config_root,
+    );
+    write_artifact(&artifacts_dir, "archive2.stdout.txt", &output.stdout);
+    write_artifact(&artifacts_dir, "archive2.stderr.txt", &output.stderr);
+    assert!(
+        output.status.success(),
+        "Archive(2) failed: {}\nstdout:\n{}\nstderr:\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        archive_dir.join(file2).exists(),
+        "Second archived file was not found"
+    );
+    let names = read_manifest_names(&manifest_path);
+    assert!(
+        names.iter().any(|n| n == file2),
+        "Manifest did not include {} after second archive. names={:?}",
+        file2,
+        names
+    );
+
+    println!("[bin-expire integration] test_restore_safety_and_archive_again: PASS");
+    println!("[bin-expire integration] test_dir={}", test_dir.display());
+    println!(
+        "[bin-expire integration] artifacts_dir={} (set BIN_EXPIRE_TEST_KEEP=1 to keep dirs)",
+        artifacts_dir.display()
+    );
+    if test_verbose() {
+        eprintln!(
+            "[bin-expire integration] final manifest:\n{}",
+            fs::read_to_string(&manifest_path).unwrap_or_default()
+        );
+    }
+
     cleanup_dir(&test_dir);
     cleanup_dir(&archive_dir);
     cleanup_dir(&config_root);

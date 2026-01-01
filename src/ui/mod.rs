@@ -3,6 +3,7 @@ use colored::Colorize;
 use std::path::{Path, PathBuf};
 use tabled::Tabled;
 
+#[cfg(windows)]
 use crate::analyzer::{select_last_used_time, FileTimes};
 
 // Default View: Compare Access vs Mod dates

@@ -23,6 +23,7 @@ pub fn run(dir: Option<String>, days: Option<i64>, config: &Config) -> Result<()
     let mut binaries = Vec::new();
     let mut any_dir = false;
 
+    #[cfg(windows)]
     let scan_start = std::time::SystemTime::now();
 
     println!("{}", "─".repeat(60).dimmed());
@@ -49,6 +50,7 @@ pub fn run(dir: Option<String>, days: Option<i64>, config: &Config) -> Result<()
         binaries.extend(scan_directory(&path, config.windows_use_access_time));
     }
 
+    #[cfg(windows)]
     let scan_end = std::time::SystemTime::now();
 
     #[cfg(windows)]

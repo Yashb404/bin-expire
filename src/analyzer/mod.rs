@@ -1,5 +1,8 @@
 use std::path::Path;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::SystemTime;
+
+#[cfg(any(windows, test))]
+use std::time::{Duration, UNIX_EPOCH};
 
 use crate::models::LastUsedSource;
 
@@ -74,7 +77,7 @@ pub fn get_file_info(file_path: &Path) -> Option<FileInfo> {
 
     #[cfg(not(windows))]
     {
-        let metadata = fs::metadata(file_path).ok()?;
+        let metadata = std::fs::metadata(file_path).ok()?;
         let accessed = metadata.accessed().ok();
         let modified = metadata.modified().ok();
         Some(FileInfo {
@@ -86,13 +89,13 @@ pub fn get_file_info(file_path: &Path) -> Option<FileInfo> {
 
 pub fn select_last_used_time(
     times: FileTimes,
-    windows_use_access_time: bool,
+    _windows_use_access_time: bool,
 ) -> (SystemTime, LastUsedSource) {
     // Access times are frequently unreliable on Windows (disabled or updated by scanning).
     // Prefer mtime on Windows for deterministic behavior.
     #[cfg(windows)]
     {
-        if windows_use_access_time {
+        if _windows_use_access_time {
             if let Some(accessed) = times.accessed {
                 return (accessed, LastUsedSource::Accessed);
             }

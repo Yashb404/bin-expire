@@ -36,6 +36,7 @@ colored = "3.0.0"
 [dev-dependencies]
 # For faking file times in tests
 filetime = "0.2.26"
+serde = { version = "1.0", features = ["derive"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }

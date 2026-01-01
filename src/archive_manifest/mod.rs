@@ -66,6 +66,21 @@ pub fn record_archive(name: &str, original_path: &Path, archived_path: &Path) ->
     save_manifest_atomic(&path, &manifest)
 }
 
+pub fn latest_entry_by_name(name: &str) -> Result<ArchiveEntry> {
+    let path = manifest_file_path();
+    let manifest = load_manifest(&path)?;
+
+    let entry = manifest
+        .entries
+        .iter()
+        .rev()
+        .find(|e| e.name == name)
+        .ok_or_else(|| anyhow!("No archived entry found for '{}'", name))?
+        .clone();
+
+    Ok(entry)
+}
+
 pub fn take_latest_entry_by_name(name: &str) -> Result<ArchiveEntry> {
     let path = manifest_file_path();
     let mut manifest = load_manifest(&path)?;
