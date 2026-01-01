@@ -1,142 +1,138 @@
 # bin-expire
 
-A small Rust CLI to find and safely archive “stale” binaries from common global bin folders (like `~/.cargo/bin` and `~/go/bin`).
+bin-expire scans common "bin" folders, identifies stale binaries, and can archive/restore them safely.
 
-## What it does (MVP)
+By default it scans:
 
-- Scans one or more directories for files older than a threshold (in days)
-- Prints a simple table: Status / Name / Size / Last Used / Path
-- Archives stale binaries by moving them into an archive directory (no permanent deletion)
-- Uses a persistent config file (`config.toml`) for defaults
+- `~/.cargo/bin`
+- `~/go/bin`
 
-> Note on “Last Used”: file access times (`atime`) can be unreliable on some systems (especially Windows). This project chooses a cross-platform “last used” timestamp with sensible fallbacks.
+It also detects Windows “shim” executables (0-byte `.exe` stubs, often from App Execution Aliases) and treats them specially so you don’t accidentally archive them.
 
-On Windows, the default prefers access time (`atime`) when available for better accuracy with frequently-run tools (like `cargo`). Note that NTFS can defer updating `atime` (commonly up to ~1 hour).
+## Install
 
-## Install / Run
+### Option A: Download from GitHub Releases
 
-### Run from source
+1. Download the asset for your OS from the GitHub Releases page.
+2. Put the binary somewhere on your `PATH`.
 
-```bash
-cargo run -- scan --days 30
-```
+### Option B: Build from source
 
-### Build
+Build an optimized binary:
 
 ```bash
 cargo build --release
 ```
 
-Run the built binary:
+Run it:
 
 ```bash
 ./target/release/bin-expire scan --days 30
 ```
 
-## Commands
-
-### `scan`
-
-Scan directories and list stale binaries.
-
-- If you omit `--dir`, it scans both `~/.cargo/bin` and `~/go/bin` (skipping any that don’t exist).
-
-Examples:
+Or install it into your Cargo bin directory:
 
 ```bash
-# scan defaults (~/.cargo/bin and ~/go/bin)
+cargo install --path .
+```
+
+## Quick start
+
+```bash
+# Scan default locations (~/.cargo/bin and ~/go/bin)
 bin-expire scan
 
-# scan a specific directory
-bin-expire scan --dir ~/.cargo/bin --days 30
-
-# short flag for dir
+# Scan a specific directory
 bin-expire scan -p ~/.cargo/bin --days 30
-```
 
-### `archive`
-
-Move stale binaries into the archive directory.
-
-Examples:
-
-```bash
-# archive from defaults (~/.cargo/bin and ~/go/bin)
+# Archive stale binaries (moves them into your configured archive_path)
 bin-expire archive --days 30
 
-# archive from a specific directory
-bin-expire archive --dir ~/.cargo/bin --days 30
-```
-
-### `restore`
-
-Restore a previously archived binary back to its original path (based on the archive manifest).
-
-```bash
+# Restore a previously archived binary by name
 bin-expire restore old_tool.exe
 ```
 
+## Commands
+
+### scan
+
+- Default output shows only:
+  - STALE rows (`✗`)
+  - SHIM rows (`·`)
+- `--verbose` also shows OK rows (`✓`) and adds:
+  - `PATH` column
+  - `SRC` column indicating where `last_used` came from: `A`=atime, `M`=mtime, `?`=unknown
+
+Useful filters:
+
+- `--only-stale` (hides OK + SHIM)
+- `--hide-ok` (mainly useful with `--verbose`)
+- `--hide-shim`
+
+### archive
+
+Moves stale binaries into `archive_path` and records each move in a manifest so it can be restored later.
+
+Notes:
+
+- SHIM entries (0-byte `.exe`) are never archived.
+- Archiving avoids overwriting by choosing a non-colliding filename in the archive directory.
+- If a direct rename/move fails, it falls back to copy + remove.
+
+### restore
+
+Restores the most recent archived entry for the given name (from the manifest).
+
+Safety behavior:
+
+- Fails if the archived file is missing.
+- Fails if the destination already exists (it will not overwrite your existing file).
+
 ## Configuration
 
-On first run, `bin-expire` creates a config file in your platform config directory.
+On first run, bin-expire creates a config file under your platform config directory:
 
-Typical locations:
+- Windows: `%APPDATA%\bin-expire\config.toml`
+- Linux: `~/.config/bin-expire/config.toml`
+- macOS: `~/Library/Application Support/bin-expire/config.toml`
 
-- **Windows**: `%APPDATA%/bin-expire/config.toml`
-- **Linux**: `~/.config/bin-expire/config.toml`
-- **macOS**: `~/Library/Application Support/bin-expire/config.toml`
+You can override the config root with an environment variable:
+
+- `BIN_EXPIRE_CONFIG_DIR=/some/path`
+
+When set, bin-expire reads/writes:
+
+- `BIN_EXPIRE_CONFIG_DIR/bin-expire/config.toml`
+- `BIN_EXPIRE_CONFIG_DIR/bin-expire/archive.json`
 
 Example `config.toml`:
 
 ```toml
 ignored_bins = ["cargo", "rustc"]
 default_threshold_days = 90
-archive_path = "C:\\Users\\me\\.bin-expire\\archive"
+archive_path = "C:/Users/me/.bin-expire/archive"
+windows_use_access_time = true
 ```
 
-### Config keys
+Config keys:
 
-- `ignored_bins`: list of binary file names to ignore during scan/archive
+- `ignored_bins`: file names to ignore during scan/archive
 - `default_threshold_days`: used when `--days` is not provided
 - `archive_path`: where archived binaries are moved
-- `windows_use_access_time`: **Windows only**. If `true`, prefers `atime` over `mtime` when deciding “last used”.
+- `windows_use_access_time`: Windows-only preference for selecting `last_used`
 
-#### Windows note: NTFS last access updates
+## Windows note (atime)
 
-Windows/NTFS may defer last access time updates (commonly up to ~1 hour) and the feature can be disabled for performance.
+On Windows, access times (atime) are best-effort and can be disabled, delayed, or updated by scanning/listing.
 
-To check the setting (run in an elevated terminal):
-
-```bat
-fsutil behavior query disablelastaccess
-```
-
-To enable last access updates (may require a restart):
-
-```bat
-fsutil behavior set disablelastaccess 0
-```
-
-## Archive manifest
-
-When you run `archive`, `bin-expire` records moves in an `archive.json` manifest alongside the config file. `restore` uses this manifest to put a binary back where it came from.
-
-## Notes / Safety
-
-- `archive` avoids overwriting by choosing a non-colliding filename in the archive directory.
-- If a direct rename/move fails (e.g., cross-device move), it falls back to copy + remove.
+- If results look suspicious, set `windows_use_access_time=false` to use modified time (mtime).
+- bin-expire may also detect atime “contamination” during a scan and fall back to mtime.
 
 ## Development
 
-Run tests:
-
 ```bash
+cargo fmt --all
+cargo clippy --all-targets -- -D warnings
 cargo test
+cargo test --release --all-targets
 ```
-
-## Roadmap ideas (not implemented yet)
-
-- Archive manifest + `restore <name>`
-- `clean` command to delete archived binaries
-- Dry-run mode
-- Color-coded output
