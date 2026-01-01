@@ -4,6 +4,7 @@ use anyhow::Result;
 pub fn archive_binary(bin: &BinaryInfo, archive_dir: &std::path::Path) -> Result<()> {
     println!("Archiving: {}", bin.name);
     // TODO: Implement file moving logic
+    
     Ok(())
 }
 

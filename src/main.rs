@@ -26,7 +26,7 @@ enum Commands {
     /// Scan directories for stale binaries
     Scan {
         /// Directory to scan (e.g., ~/.cargo/bin)
-        #[arg(short, long)]
+        #[arg(short = 'p', long)]
         dir: Option<String>,
         /// Threshold in days for stale files
         #[arg(short, long, default_value_t = 90)]
