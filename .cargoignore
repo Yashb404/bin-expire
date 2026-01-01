@@ -1,0 +1,18 @@
+/target
+/target/**
+/test_bin_scan
+test_unit_access.txt
+
+# Editor/IDE
+.vscode/
+.idea/
+*.iml
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Logs/temp
+*.log
+*.tmp
+*.swp
