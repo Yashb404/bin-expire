@@ -5,10 +5,12 @@ mod config;
 mod fs_scanner;
 mod archiver;
 mod archive_manifest;
+mod cli;
+mod cli_help;
 
 
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::Parser;
 use chrono::{DateTime, Utc};
 use std::path::PathBuf;
 use tabled::{Table, Tabled};
@@ -24,53 +26,7 @@ use crate::archiver::archive_binary;
 use crate::archiver::move_file_with_fallback;
 use crate::archive_manifest::{record_archive, take_latest_entry_by_name};
 
-#[derive(Parser)]
-#[command(name = "bin-expire")]
-#[command(about = "A CLI tool to manage old binaries", long_about = None)]
-struct Cli {
-    #[command(subcommand)]
-    command: Commands,
-}
-
-#[derive(Subcommand)]
-enum Commands {
-    /// Scan directories for stale binaries
-    Scan {
-        /// Directory to scan (e.g., ~/.cargo/bin)
-        #[arg(short = 'p', long)]
-        dir: Option<String>,
-        /// Threshold in days for stale files
-        #[arg(short, long)]
-        days: Option<i64>,
-
-        /// Show a more detailed table (includes PATH) and also shows OK rows
-        #[arg(short, long)]
-        verbose: bool,
-
-        /// Show only stale binaries (hides OK and SHIM rows)
-        #[arg(long)]
-        only_stale: bool,
-        /// Hide OK rows from the scan output table (mainly useful with --verbose)
-        #[arg(long)]
-        hide_ok: bool,
-        /// Hide SHIM rows from the scan output table
-        #[arg(long)]
-        hide_shim: bool,
-    },
-    /// Move stale binaries to the archive folder
-    Archive {
-        /// Directory to scan (e.g., ~/.cargo/bin)
-        #[arg(short = 'p', long)]
-        dir: Option<String>,
-        #[arg(short, long)]
-        days: Option<i64>,
-    },
-    /// Restore a previously archived binary back to its original path
-    Restore {
-        /// The archived file name to restore (e.g., "ripgrep" or "old_tool.exe")
-        name: String,
-    },
-}
+use crate::cli::{Cli, Commands};
 
 // Default View: Compare Access vs Mod dates
 #[derive(Tabled)]

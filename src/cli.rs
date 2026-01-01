@@ -1,0 +1,60 @@
+use clap::{Parser, Subcommand};
+
+use crate::cli_help;
+
+#[derive(Parser)]
+#[command(name = "bin-expire")]
+#[command(
+    about = "A CLI tool to manage old binaries",
+    long_about = cli_help::TOP_LONG_ABOUT,
+    after_help = cli_help::TOP_AFTER_HELP
+)]
+pub struct Cli {
+    #[command(subcommand)]
+    pub command: Commands,
+}
+
+#[derive(Subcommand)]
+pub enum Commands {
+    /// Scan directories for stale binaries
+    #[command(long_about = cli_help::SCAN_LONG_ABOUT, after_help = cli_help::SCAN_AFTER_HELP)]
+    Scan {
+        /// Directory to scan (e.g., ~/.cargo/bin)
+        #[arg(short = 'p', long)]
+        dir: Option<String>,
+        /// Threshold in days for stale files
+        #[arg(short, long)]
+        days: Option<i64>,
+
+        /// Show a more detailed table (includes PATH) and also shows OK rows
+        #[arg(short, long)]
+        verbose: bool,
+
+        /// Show only stale binaries (hides OK and SHIM rows)
+        #[arg(long)]
+        only_stale: bool,
+        /// Hide OK rows from the scan output table (mainly useful with --verbose)
+        #[arg(long)]
+        hide_ok: bool,
+        /// Hide SHIM rows from the scan output table
+        #[arg(long)]
+        hide_shim: bool,
+    },
+
+    /// Move stale binaries to the archive folder
+    #[command(after_help = cli_help::ARCHIVE_AFTER_HELP)]
+    Archive {
+        /// Directory to scan (e.g., ~/.cargo/bin)
+        #[arg(short = 'p', long)]
+        dir: Option<String>,
+        #[arg(short, long)]
+        days: Option<i64>,
+    },
+
+    /// Restore a previously archived binary back to its original path
+    #[command(after_help = cli_help::RESTORE_AFTER_HELP)]
+    Restore {
+        /// The archived file name to restore (e.g., "ripgrep" or "old_tool.exe")
+        name: String,
+    },
+}
