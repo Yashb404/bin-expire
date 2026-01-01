@@ -1,4 +1,7 @@
 # bin-expire
+![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg) 
+![Language: Rust](https://img.shields.io/badge/Language-Rust-orange) 
+![Platform: Linux | macOS | Windows](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey)
 
 bin-expire scans common "bin" folders, identifies stale binaries, and can archive/restore them safely.
 
