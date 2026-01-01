@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::time::SystemTime;
 
-#[cfg(any(windows, test))]
+#[cfg(windows)]
 use std::time::{Duration, UNIX_EPOCH};
 
 use crate::models::LastUsedSource;
@@ -137,7 +137,7 @@ mod tests {
     use super::*;
     use filetime::{set_file_times, FileTime};
     use std::fs;
-    use std::time::{Duration, SystemTime};
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     #[test]
     fn test_get_last_used_time_logic() {

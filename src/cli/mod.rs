@@ -26,7 +26,7 @@ pub enum Commands {
         #[arg(short, long)]
         days: Option<i64>,
 
-        /// Show a more detailed table (includes PATH) and also shows OK rows
+        /// Show a more detailed table (includes PATH, SRC) and also shows OK rows
         #[arg(short, long)]
         verbose: bool,
 

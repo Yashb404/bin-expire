@@ -142,8 +142,14 @@ pub fn run(
         let modified_str = ui::format_date_short(bin.modified);
 
         if verbose {
+            let src = match bin.last_used_source {
+                crate::models::LastUsedSource::Accessed => "A",
+                crate::models::LastUsedSource::Modified => "M",
+                crate::models::LastUsedSource::Unknown => "?",
+            };
             verbose_rows.push(ui::VerboseRow {
                 st: status,
+                src,
                 name: bin.name,
                 size: ui::format_bytes(bin.size),
                 accessed: accessed_str,

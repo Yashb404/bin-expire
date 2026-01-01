@@ -306,7 +306,7 @@ fn test_archive_and_restore_roundtrip() {
 /// This test verifies restore safety behavior:
 /// - If destination exists, restore should fail and NOT remove manifest entry.
 /// - If archived file is missing, restore should fail and NOT remove manifest entry.
-/// Also verifies a second archive run still records entries.
+///   Also verifies a second archive run still records entries.
 #[test]
 fn test_restore_safety_and_archive_again() {
     let test_dir = unique_dir("test_integration_dir_restore_safety");

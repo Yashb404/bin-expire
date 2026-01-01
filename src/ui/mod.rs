@@ -31,6 +31,9 @@ pub struct VerboseRow {
     #[tabled(rename = "ST")]
     pub st: &'static str,
 
+    #[tabled(rename = "SRC")]
+    pub src: &'static str,
+
     #[tabled(rename = "NAME")]
     pub name: String,
 
