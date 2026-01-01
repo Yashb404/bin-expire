@@ -243,7 +243,7 @@ pub fn print_scan_status_info(
     hide_shim: bool,
 ) {
     println!(
-        "{} (info) STALE={} OK={} SHIM={} (filters: hide_ok={}, hide_shim={}).",
+        "{} (info) STALE={} OK={} ALIAS_STUB={} (filters: hide_ok={}, hide_shim={}).",
         "[i]".blue(),
         stale_count,
         ok_count,
@@ -252,17 +252,17 @@ pub fn print_scan_status_info(
         hide_shim
     );
     println!(
-        "{} OK: non-shim binaries with last_used within {} days.",
+        "{} OK: non-alias-stub binaries with last_used within {} days.",
         "[i]".blue(),
         days
     );
     println!(
-        "{} STALE: non-shim binaries with last_used older than {} days.",
+        "{} STALE: non-alias-stub binaries with last_used older than {} days.",
         "[i]".blue(),
         days
     );
     println!(
-        "{} SHIM: a 0-byte .exe placeholder (often App Execution Alias); treated specially and never archived.",
+        "{} ALIAS_STUB: a 0-byte .exe App Execution Alias stub; treated specially and never archived.",
         "[i]".blue()
     );
 }

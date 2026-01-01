@@ -7,7 +7,7 @@ By default it scans:
 - `~/.cargo/bin`
 - `~/go/bin`
 
-It also detects Windows “shim” executables (0-byte `.exe` stubs, often from App Execution Aliases) and treats them specially so you don’t accidentally archive them.
+It also detects Windows “App Execution Alias stubs” (0-byte `.exe` placeholder files) and treats them specially so you don’t accidentally archive them.
 
 ## Install
 
@@ -86,16 +86,16 @@ bin-expire restore old_tool.exe
 
 - Default output shows only:
  \- STALE rows (`✗`)
-  - SHIM rows (`·`)
+  - alias-stub rows (`·`) (Windows App Execution Alias stubs)
 - `--verbose` also shows OK rows (`✓`) and adds:
   - `PATH` column
   - `SRC` column indicating where `last_used` came from: `A`=atime, `M`=mtime, `?`=unknown
 
 Useful filters:
 
-- `--only-stale` (hides OK + SHIM)
+- `--only-stale` (hides OK + alias-stubs)
 - `--hide-ok` (mainly useful with `--verbose`)
-- `--hide-shim`
+- `--hide-shim` (hides alias-stub rows)
 
 ### archive
 
@@ -103,7 +103,7 @@ Moves stale binaries into `archive_path` and records each move in a manifest so 
 
 Notes:
 
-- SHIM entries (0-byte `.exe`) are never archived.
+- App Execution Alias stubs (0-byte `.exe`) are never archived.
 - Archiving avoids overwriting by choosing a non-colliding filename in the archive directory.
 - If a direct rename/move fails, it falls back to copy + remove.
 
