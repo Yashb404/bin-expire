@@ -156,7 +156,7 @@ fn test_detects_stale_binary() {
             )
         });
 
-    // Scan tables use glyphs: ✗ stale, ✓ ok, · alias-stub.
+    // Scan tables use glyphs: ✗ stale, ✓ ok, · stub.
     assert!(
         row.contains("✗"),
         "Expected old_tool.exe to be marked stale (✗).\nrow:\n{}\nstdout:\n{}\nstderr:\n{}",

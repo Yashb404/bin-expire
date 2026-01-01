@@ -30,15 +30,15 @@ pub enum Commands {
         #[arg(short, long)]
         verbose: bool,
 
-        /// Show only stale binaries (hides OK and alias-stub rows)
+        /// Show only stale binaries (hides OK and stub rows)
         #[arg(long)]
         only_stale: bool,
         /// Hide OK rows from the scan output table (mainly useful with --verbose)
         #[arg(long)]
         hide_ok: bool,
-        /// Hide alias-stub rows (0-byte .exe App Execution Alias stubs) from the scan output table
+        /// Hide stub rows (0-byte .exe App Execution Alias stubs) from the scan output table
         #[arg(long)]
-        hide_shim: bool,
+        hide_stub: bool,
     },
 
     /// Move stale binaries to the archive folder

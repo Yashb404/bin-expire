@@ -237,32 +237,32 @@ pub fn print_windows_notice(windows_use_access_time: bool) {
 pub fn print_scan_status_info(
     days: i64,
     ok_count: u64,
-    shim_count: u64,
+    stub_count: u64,
     stale_count: u64,
     hide_ok: bool,
-    hide_shim: bool,
+    hide_stub: bool,
 ) {
     println!(
-        "{} (info) STALE={} OK={} ALIAS_STUB={} (filters: hide_ok={}, hide_shim={}).",
+        "{} (info) STALE={} OK={} STUB={} (filters: hide_ok={}, hide_stub={}).",
         "[i]".blue(),
         stale_count,
         ok_count,
-        shim_count,
+        stub_count,
         hide_ok,
-        hide_shim
+        hide_stub
     );
     println!(
-        "{} OK: non-alias-stub binaries with last_used within {} days.",
+        "{} OK: non-stub binaries with last_used within {} days.",
         "[i]".blue(),
         days
     );
     println!(
-        "{} STALE: non-alias-stub binaries with last_used older than {} days.",
+        "{} STALE: non-stub binaries with last_used older than {} days.",
         "[i]".blue(),
         days
     );
     println!(
-        "{} ALIAS_STUB: a 0-byte .exe App Execution Alias stub; treated specially and never archived.",
+        "{} STUB: a 0-byte .exe App Execution Alias stub; treated specially and never archived.",
         "[i]".blue()
     );
 }

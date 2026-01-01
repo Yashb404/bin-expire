@@ -76,13 +76,13 @@ pub fn run(dir: Option<String>, days: Option<i64>, config: &Config) -> Result<()
         if config.ignored_bins.iter().any(|b| b == &bin.name) {
             continue;
         }
-        let is_probable_shim = bin.size == 0
+        let is_probable_stub = bin.size == 0
             && bin
                 .path
                 .extension()
                 .is_some_and(|ext| ext.to_string_lossy().eq_ignore_ascii_case("exe"));
 
-        if is_probable_shim {
+        if is_probable_stub {
             continue;
         }
 

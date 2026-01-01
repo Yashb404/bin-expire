@@ -15,12 +15,12 @@ pub fn run(
     verbose: bool,
     only_stale: bool,
     hide_ok: bool,
-    hide_shim: bool,
+    hide_stub: bool,
     config: &Config,
 ) -> Result<()> {
     let days = days.unwrap_or(config.default_threshold_days);
     let hide_ok = only_stale || hide_ok;
-    let hide_shim = only_stale || hide_shim;
+    let hide_stub = only_stale || hide_stub;
 
     let dirs: Vec<PathBuf> = match dir {
         Some(path_str) => vec![ui::expand_tilde(&path_str)],
@@ -85,7 +85,7 @@ pub fn run(
     let mut stale_count: u64 = 0;
     let mut stale_total_bytes: u64 = 0;
     let mut ok_count: u64 = 0;
-    let mut shim_count: u64 = 0;
+    let mut stub_count: u64 = 0;
 
     binaries.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
 
@@ -93,33 +93,33 @@ pub fn run(
         if config.ignored_bins.iter().any(|b| b == &bin.name) {
             continue;
         }
-        let is_probable_shim = bin.size == 0
+        let is_probable_stub = bin.size == 0
             && bin
                 .path
                 .extension()
                 .is_some_and(|ext| ext.to_string_lossy().eq_ignore_ascii_case("exe"));
 
-        let is_stale = !is_probable_shim && is_dormant(bin.last_used, days);
+        let is_stale = !is_probable_stub && is_dormant(bin.last_used, days);
         if is_stale {
             stale_count += 1;
             stale_total_bytes = stale_total_bytes.saturating_add(bin.size);
         }
 
-        if is_probable_shim {
-            shim_count += 1;
+        if is_probable_stub {
+            stub_count += 1;
         } else if !is_stale {
             ok_count += 1;
         }
 
         // Visibility:
-        // - default: stale + alias-stubs
+        // - default: stale + stubs
         // - verbose: also includes OK
-        // - flags can hide OK/alias-stubs regardless of verbosity
-        let mut is_visible = is_stale || is_probable_shim || verbose;
-        if hide_shim && is_probable_shim {
+        // - flags can hide OK/stubs regardless of verbosity
+        let mut is_visible = is_stale || is_probable_stub || verbose;
+        if hide_stub && is_probable_stub {
             is_visible = false;
         }
-        if hide_ok && !is_probable_shim && !is_stale {
+        if hide_ok && !is_probable_stub && !is_stale {
             is_visible = false;
         }
         if !is_visible {
@@ -127,8 +127,8 @@ pub fn run(
         }
 
         // Keep status glyphs short for stable table alignment.
-        let status = if is_probable_shim {
-            "·" // alias-stub
+        let status = if is_probable_stub {
+            "·" // stub
         } else if is_stale {
             "✗"
         } else {
@@ -207,14 +207,14 @@ pub fn run(
             config.archive_path.display().to_string().cyan()
         );
 
-        ui::print_scan_status_info(days, ok_count, shim_count, stale_count, hide_ok, hide_shim);
+        ui::print_scan_status_info(days, ok_count, stub_count, stale_count, hide_ok, hide_stub);
     } else {
         println!(
             "{} No stale binaries found. Your system is clean!",
             "✓".green().bold()
         );
 
-        ui::print_scan_status_info(days, ok_count, shim_count, stale_count, hide_ok, hide_shim);
+        ui::print_scan_status_info(days, ok_count, stub_count, stale_count, hide_ok, hide_stub);
     }
 
     Ok(())

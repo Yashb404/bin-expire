@@ -86,16 +86,16 @@ bin-expire restore old_tool.exe
 
 - Default output shows only:
  \- STALE rows (`✗`)
-  - alias-stub rows (`·`) (Windows App Execution Alias stubs)
+  - stub rows (`·`) (Windows App Execution Alias stubs)
 - `--verbose` also shows OK rows (`✓`) and adds:
   - `PATH` column
   - `SRC` column indicating where `last_used` came from: `A`=atime, `M`=mtime, `?`=unknown
 
 Useful filters:
 
-- `--only-stale` (hides OK + alias-stubs)
+- `--only-stale` (hides OK + stubs)
 - `--hide-ok` (mainly useful with `--verbose`)
-- `--hide-shim` (hides alias-stub rows)
+- `--hide-stub` (hides stub rows)
 
 ### archive
 

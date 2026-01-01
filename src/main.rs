@@ -32,7 +32,7 @@ fn main() -> Result<()> {
             verbose,
             only_stale,
             hide_ok,
-            hide_shim,
+            hide_stub,
         } => {
             commands::scan::run(
                 dir.clone(),
@@ -40,7 +40,7 @@ fn main() -> Result<()> {
                 *verbose,
                 *only_stale,
                 *hide_ok,
-                *hide_shim,
+                *hide_stub,
                 &config,
             )?;
         }
