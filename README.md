@@ -57,7 +57,7 @@ bin-expire restore old_tool.exe
 ### scan
 
 - Default output shows only:
-  - STALE rows (`✗`)
+ \- STALE rows (`✗`)
   - SHIM rows (`·`)
 - `--verbose` also shows OK rows (`✓`) and adds:
   - `PATH` column

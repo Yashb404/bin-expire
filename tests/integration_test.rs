@@ -39,7 +39,7 @@ fn unique_dir(prefix: &str) -> PathBuf {
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
-    PathBuf::from(format!("{}_{}_{}", prefix, pid, ts))
+    std::env::temp_dir().join(format!("{}_{}_{}", prefix, pid, ts))
 }
 
 fn run_cli(args: &[&str], config_root: &Path) -> Output {
