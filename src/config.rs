@@ -1,8 +1,8 @@
-use anyhow::Result;
 use anyhow::Context;
+use anyhow::Result;
+use std::env;
 use std::fs;
 use std::path::PathBuf;
-use std::env;
 
 use crate::models::Config;
 
@@ -47,16 +47,23 @@ pub fn load_config() -> Result<Config> {
         let missing_threshold_key = !raw.contains("default_threshold_days");
         let missing_archive_key = !raw.contains("archive_path");
         let missing_ignored_key = !raw.contains("ignored_bins");
-        if missing_windows_key || missing_threshold_key || missing_archive_key || missing_ignored_key {
-            let updated = toml::to_string_pretty(&cfg).context("Failed to serialize updated config")?;
+        if missing_windows_key
+            || missing_threshold_key
+            || missing_archive_key
+            || missing_ignored_key
+        {
+            let updated =
+                toml::to_string_pretty(&cfg).context("Failed to serialize updated config")?;
             fs::write(&path, updated)
                 .with_context(|| format!("Failed to update config file: {}", path.display()))?;
         }
         return Ok(cfg);
     }
 
-    let mut cfg = Config::default();
-    cfg.archive_path = default_archive_path();
+    let cfg = Config {
+        archive_path: default_archive_path(),
+        ..Config::default()
+    };
 
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)

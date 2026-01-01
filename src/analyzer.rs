@@ -66,10 +66,10 @@ pub fn get_file_info(file_path: &Path) -> Option<FileInfo> {
         let accessed = filetime_to_systemtime(data.ftLastAccessTime);
         let modified = filetime_to_systemtime(data.ftLastWriteTime);
 
-        return Some(FileInfo {
+        Some(FileInfo {
             size,
             times: FileTimes { accessed, modified },
-        });
+        })
     }
 
     #[cfg(not(windows))]
@@ -84,7 +84,10 @@ pub fn get_file_info(file_path: &Path) -> Option<FileInfo> {
     }
 }
 
-pub fn select_last_used_time(times: FileTimes, windows_use_access_time: bool) -> (SystemTime, LastUsedSource) {
+pub fn select_last_used_time(
+    times: FileTimes,
+    windows_use_access_time: bool,
+) -> (SystemTime, LastUsedSource) {
     // Access times are frequently unreliable on Windows (disabled or updated by scanning).
     // Prefer mtime on Windows for deterministic behavior.
     #[cfg(windows)]
@@ -102,7 +105,8 @@ pub fn select_last_used_time(times: FileTimes, windows_use_access_time: bool) ->
         if let Some(accessed) = times.accessed {
             return (accessed, LastUsedSource::Accessed);
         }
-        return (SystemTime::now(), LastUsedSource::Unknown);
+
+        (SystemTime::now(), LastUsedSource::Unknown)
     }
 
     // On Unix-like systems, use atime when available, fallback to mtime.
@@ -114,7 +118,8 @@ pub fn select_last_used_time(times: FileTimes, windows_use_access_time: bool) ->
         if let Some(modified) = times.modified {
             return (modified, LastUsedSource::Modified);
         }
-        return (SystemTime::now(), LastUsedSource::Unknown);
+
+        (SystemTime::now(), LastUsedSource::Unknown)
     }
 }
 
@@ -127,35 +132,38 @@ pub fn is_dormant(timestamp: SystemTime, days_threshold: i64) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use filetime::{set_file_times, FileTime};
     use std::fs;
-    use std::path::Path;
-    use std::time::{SystemTime, Duration};
-    use filetime::{FileTime, set_file_times};
+    use std::time::{Duration, SystemTime};
 
     #[test]
     fn test_get_last_used_time_logic() {
-        // 1. Setup: Create a dummy file
-        let path = Path::new("test_unit_access.txt");
-        fs::write(path, "test data").expect("Failed to create test file");
+        // 1. Setup: Create a dummy file (unique, in temp dir)
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("bin_expire_unit_{unique}.txt"));
+        fs::write(&path, "test data").expect("Failed to create test file");
 
         // 2. Set the time: We want to simulate a file accessed exactly 10 days ago.
         // 86400 seconds * 10 days = 864000 seconds
         let seconds_in_10_days = 86400 * 10;
         let target_time = SystemTime::now() - Duration::from_secs(seconds_in_10_days);
-        
+
         // Convert to FileTime for the OS to understand
         let ft = FileTime::from_system_time(target_time);
-        
+
         // set_file_times(atime, mtime) - We set both to the same old time
-        set_file_times(path, ft, ft).expect("Failed to backdate file");
+        set_file_times(&path, ft, ft).expect("Failed to backdate file");
 
         // 3. Execute the real production path we care about:
         //    read file attributes -> compute last_used (using mtime here for determinism)
-        let info = get_file_info(path).expect("expected get_file_info to succeed");
+        let info = get_file_info(&path).expect("expected get_file_info to succeed");
         let (result_time, _source) = select_last_used_time(info.times, false);
 
         // 4. Cleanup
-       // fs::remove_file(path).expect("Failed to cleanup test file");
+        let _ = fs::remove_file(&path);
 
         // 5. Assertion: Calculate the difference between Now and the result
         let now = SystemTime::now();
@@ -173,6 +181,6 @@ mod tests {
             diff_secs
         );
 
-        println!("Unit Test Passed: Function correctly read the backdated access time.");
+        println!("Unit Test Passed: Function correctly read the backdated file time.");
     }
 }

@@ -1,6 +1,6 @@
 use crate::models::BinaryInfo;
-use anyhow::Result;
 use anyhow::Context;
+use anyhow::Result;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -8,10 +8,12 @@ pub fn move_file_with_fallback(src: &Path, dest: &Path) -> Result<()> {
     match fs::rename(src, dest) {
         Ok(_) => Ok(()),
         Err(rename_err) => {
-            fs::copy(src, dest)
-                .with_context(|| format!("Failed to copy {} to {}", src.display(), dest.display()))?;
-            fs::remove_file(src)
-                .with_context(|| format!("Failed to remove original {} after copy", src.display()))?;
+            fs::copy(src, dest).with_context(|| {
+                format!("Failed to copy {} to {}", src.display(), dest.display())
+            })?;
+            fs::remove_file(src).with_context(|| {
+                format!("Failed to remove original {} after copy", src.display())
+            })?;
             let _ = rename_err;
             Ok(())
         }

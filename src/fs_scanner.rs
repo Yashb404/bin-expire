@@ -5,9 +5,13 @@ use walkdir::WalkDir;
 pub fn scan_directory(dir: &std::path::Path, windows_use_access_time: bool) -> Vec<BinaryInfo> {
     let mut binaries = Vec::new();
 
-    for entry in WalkDir::new(dir).max_depth(1).into_iter().filter_map(|e| e.ok()) {
+    for entry in WalkDir::new(dir)
+        .max_depth(1)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
         let path = entry.path();
-        
+
         if path.is_dir() {
             continue;
         }
@@ -19,7 +23,11 @@ pub fn scan_directory(dir: &std::path::Path, windows_use_access_time: bool) -> V
 
         let times = info.times;
         let (last_used, last_used_source) = select_last_used_time(times, windows_use_access_time);
-        let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+        let name = path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
 
         binaries.push(BinaryInfo {
             name,

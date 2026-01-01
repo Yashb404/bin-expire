@@ -31,13 +31,15 @@ fn load_manifest(path: &Path) -> Result<ArchiveManifest> {
 
 fn save_manifest_atomic(path: &Path, manifest: &ArchiveManifest) -> Result<()> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("Failed to create manifest directory: {}", parent.display()))?;
+        fs::create_dir_all(parent).with_context(|| {
+            format!("Failed to create manifest directory: {}", parent.display())
+        })?;
     }
 
     let tmp = path.with_extension("json.tmp");
     let raw = serde_json::to_string_pretty(manifest).context("Failed to serialize manifest")?;
-    fs::write(&tmp, raw).with_context(|| format!("Failed to write temp manifest: {}", tmp.display()))?;
+    fs::write(&tmp, raw)
+        .with_context(|| format!("Failed to write temp manifest: {}", tmp.display()))?;
 
     // Windows doesn't allow rename over an existing file.
     if path.exists() {

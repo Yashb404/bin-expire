@@ -1,8 +1,8 @@
+use filetime::{set_file_times, FileTime};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::time::{Duration, SystemTime};
-use filetime::{FileTime, set_file_times};
 
 fn env_flag_is_truthy(key: &str) -> bool {
     match std::env::var(key) {
@@ -37,8 +37,14 @@ fn run_cli(args: &[&str], config_root: &Path) -> Output {
     cmd.args(["run", "--"]);
     cmd.args(args);
     if test_verbose() {
-        eprintln!("[bin-expire tests] running: cargo run -- {}", args.join(" "));
-        eprintln!("[bin-expire tests] BIN_EXPIRE_CONFIG_DIR={}", config_root.display());
+        eprintln!(
+            "[bin-expire tests] running: cargo run -- {}",
+            args.join(" ")
+        );
+        eprintln!(
+            "[bin-expire tests] BIN_EXPIRE_CONFIG_DIR={}",
+            config_root.display()
+        );
     }
     cmd.output().expect("Failed to execute command")
 }
@@ -116,7 +122,7 @@ fn test_detects_stale_binary() {
     // 6. Assertions
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
-    
+
     // We assert that the output contains "STALE"
     assert!(
         output.status.success(),
@@ -129,7 +135,12 @@ fn test_detects_stale_binary() {
     let row = stdout
         .lines()
         .find(|l| l.contains("old_tool.exe"))
-        .unwrap_or_else(|| panic!("Output did not contain filename row.\nstdout:\n{}\nstderr:\n{}", stdout, stderr));
+        .unwrap_or_else(|| {
+            panic!(
+                "Output did not contain filename row.\nstdout:\n{}\nstderr:\n{}",
+                stdout, stderr
+            )
+        });
 
     // New scan table uses glyphs:
     // ✗ = stale, ✓ = ok, · = shim
@@ -144,7 +155,10 @@ fn test_detects_stale_binary() {
     println!("[bin-expire integration] test_detects_stale_binary: PASS");
     println!("[bin-expire integration] test_dir={}", test_dir.display());
     println!("[bin-expire integration] file_path={}", file_path.display());
-    println!("[bin-expire integration] artifacts_dir={}", artifacts_dir.display());
+    println!(
+        "[bin-expire integration] artifacts_dir={}",
+        artifacts_dir.display()
+    );
     println!("[bin-expire integration] tips: run `cargo test -- --show-output` to see this on pass; set BIN_EXPIRE_TEST_KEEP=1 to keep dirs");
     if test_verbose() {
         println!("[bin-expire integration] scan stdout:\n{}", stdout);
@@ -209,12 +223,18 @@ fn test_archive_and_restore_roundtrip() {
 
     // It should have moved into archive
     let archived_path = archive_dir.join(file_name);
-    assert!(!file_path.exists(), "Original file still exists after archive");
+    assert!(
+        !file_path.exists(),
+        "Original file still exists after archive"
+    );
     assert!(archived_path.exists(), "Archived file was not found");
 
     // Manifest should exist
     let manifest_path = cfg_dir.join("archive.json");
-    assert!(manifest_path.exists(), "Manifest archive.json was not created");
+    assert!(
+        manifest_path.exists(),
+        "Manifest archive.json was not created"
+    );
 
     // Run restore
     let output = run_cli(&["restore", file_name], &config_root);
@@ -228,14 +248,29 @@ fn test_archive_and_restore_roundtrip() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    assert!(file_path.exists(), "File was not restored to original location");
+    assert!(
+        file_path.exists(),
+        "File was not restored to original location"
+    );
 
     println!("[bin-expire integration] test_archive_and_restore_roundtrip: PASS");
     println!("[bin-expire integration] test_dir={}", test_dir.display());
-    println!("[bin-expire integration] archive_dir={}", archive_dir.display());
-    println!("[bin-expire integration] config_root={}", config_root.display());
-    println!("[bin-expire integration] artifacts_dir={}", artifacts_dir.display());
-    println!("[bin-expire integration] manifest_path={}", manifest_path.display());
+    println!(
+        "[bin-expire integration] archive_dir={}",
+        archive_dir.display()
+    );
+    println!(
+        "[bin-expire integration] config_root={}",
+        config_root.display()
+    );
+    println!(
+        "[bin-expire integration] artifacts_dir={}",
+        artifacts_dir.display()
+    );
+    println!(
+        "[bin-expire integration] manifest_path={}",
+        manifest_path.display()
+    );
 
     // Cleanup (unless BIN_EXPIRE_TEST_KEEP=1)
     let _ = fs::remove_file(&file_path);
