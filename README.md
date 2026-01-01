@@ -13,8 +13,15 @@ By default it scans:
 It also detects Windows “App Execution Alias stubs” (0-byte `.exe` placeholder files) and treats them specially so you don’t accidentally archive them.
 
 ## Install
+### Option A: Install as a cargo crate
+1. Install Rust (from rustup)
+2. Run
+   
+   ```
+   cargo install bin-expire
+   ```
 
-### Option A: Download from GitHub Releases
+### Option B: Download from GitHub Releases
 
 1. Download the asset for your OS from the GitHub Releases page.
 2. Put the binary in a permanent folder (example):
@@ -22,32 +29,14 @@ It also detects Windows “App Execution Alias stubs” (0-byte `.exe` placehold
   - Windows: `C:\Users\<you>\AppData\Local\rust-apps\bin-expire.exe`
 
 3. Add that folder (not the `.exe`) to your `PATH`.
-
-**Windows: add to User PATH (GUI)**
-
-- Start → search “Environment Variables” → open **Edit the system environment variables**
-- **Environment Variables…** → under **User variables** select **Path** → **Edit**
-- **New** → add the folder (example): `C:\Users\<you>\AppData\Local\rust-apps`
-- OK → OK → OK, then close and re-open your terminal
-
-Verify:
+4. Verify:
 
 ```bat
 where bin-expire
 bin-expire --help
 ```
 
-**Git Bash: ensure PATH includes the folder**
-
-Git Bash may not pick up Windows PATH changes until you restart it. If you want it to always work in Git Bash, add the folder to `~/.bashrc`:
-
-```bash
-echo 'export PATH="$PATH:/c/Users/<you>/AppData/Local/rust-apps"' >> ~/.bashrc
-source ~/.bashrc
-bin-expire.exe --help
-```
-
-### Option B: Build from source
+### Option C: Build from source
 
 Build an optimized binary:
 
